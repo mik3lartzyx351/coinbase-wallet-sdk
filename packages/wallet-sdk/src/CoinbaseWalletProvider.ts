@@ -1,5 +1,10 @@
-import { standardErrorCodes, standardErrors } from './core/error';
-import { serializeError } from './core/error/serialize';
+import { Signer } from './sign/interface.js';
+import { createSigner, fetchSignerType, loadSignerType, storeSignerType } from './sign/util.js';
+import { Communicator } from ':core/communicator/Communicator.js';
+import { standardErrorCodes } from ':core/error/constants.js';
+import { standardErrors } from ':core/error/errors.js';
+import { serializeError } from ':core/error/serialize.js';
+import { SignerType } from ':core/message/ConfigMessage.js';
 import {
   AppMetadata,
   ConstructorOptions,
@@ -7,51 +12,43 @@ import {
   ProviderEventEmitter,
   ProviderInterface,
   RequestArguments,
-} from './core/provider/interface';
-import { Signer } from './sign/interface';
-import { createSigner, fetchSignerType, loadSignerType, storeSignerType } from './sign/util';
-import { checkErrorForInvalidRequestArgs } from './util/provider';
-import { Communicator } from ':core/communicator/Communicator';
-import { SignerType } from ':core/message';
-import { clearAllStorage } from ':core/storage/util';
-import { hexStringFromNumber } from ':core/type/util';
+} from ':core/provider/interface.js';
+import { ScopedLocalStorage } from ':core/storage/ScopedLocalStorage.js';
+import { hexStringFromNumber } from ':core/type/util.js';
+import { checkErrorForInvalidRequestArgs } from ':util/provider.js';
 
 export class CoinbaseWalletProvider extends ProviderEventEmitter implements ProviderInterface {
   private readonly metadata: AppMetadata;
   private readonly preference: Preference;
   private readonly communicator: Communicator;
 
-  private initPromise: Promise<void>;
   private signer: Signer | null = null;
 
   constructor({ metadata, preference: { keysUrl, ...preference } }: Readonly<ConstructorOptions>) {
     super();
     this.metadata = metadata;
     this.preference = preference;
-    this.communicator = Communicator.getInstance(keysUrl, metadata);
+    this.communicator = new Communicator({
+      url: keysUrl,
+      metadata,
+      preference,
+    });
 
-    // Async initialize
-    this.initPromise = this.initialize();
-  }
-
-  private async initialize() {
-    // Load states from storage
-    const signerType = await loadSignerType();
+    const signerType = loadSignerType();
     if (signerType) {
-      this.signer = await this.initSigner(signerType);
+      this.signer = this.initSigner(signerType);
     }
   }
 
   public async request(args: RequestArguments): Promise<unknown> {
-    await this.ensureInitialized();
     try {
       checkErrorForInvalidRequestArgs(args);
       if (!this.signer) {
         switch (args.method) {
           case 'eth_requestAccounts': {
-            const signerType = await this.requestSignerSelection();
-            const signer = await this.initSigner(signerType);
-            await signer.handshake();
+            const signerType = await this.requestSignerSelection(args);
+            const signer = this.initSigner(signerType);
+            await signer.handshake(args);
             this.signer = signer;
             storeSignerType(signerType);
             break;
@@ -86,28 +83,25 @@ export class CoinbaseWalletProvider extends ProviderEventEmitter implements Prov
   }
 
   async disconnect() {
-    await this.ensureInitialized();
     await this.signer?.cleanup();
     this.signer = null;
-    await clearAllStorage();
+    ScopedLocalStorage.clearAll();
     this.emit('disconnect', standardErrors.provider.disconnected('User initiated disconnection'));
   }
 
   readonly isCoinbaseWallet = true;
 
-  private async ensureInitialized() {
-    await this.initPromise; // resolves immediately if already initialized
-  }
-
-  private requestSignerSelection(): Promise<SignerType> {
+  private requestSignerSelection(handshakeRequest: RequestArguments): Promise<SignerType> {
     return fetchSignerType({
       communicator: this.communicator,
       preference: this.preference,
       metadata: this.metadata,
+      handshakeRequest,
+      callback: this.emit.bind(this),
     });
   }
 
-  private async initSigner(signerType: SignerType): Promise<Signer> {
+  private initSigner(signerType: SignerType): Signer {
     return createSigner({
       signerType,
       metadata: this.metadata,

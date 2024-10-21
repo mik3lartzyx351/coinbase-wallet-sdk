@@ -1,29 +1,31 @@
 import { fireEvent } from '@testing-library/preact';
+import { vi } from 'vitest';
 
-import eip712 from '../../vendor-js/eth-eip712-util';
-import { LOCAL_STORAGE_ADDRESSES_KEY } from './relay/constants';
-import { MOCK_ADDERESS, MOCK_SIGNED_TX, MOCK_TX, MOCK_TYPED_DATA } from './relay/mocks/fixtures';
-import { mockedWalletLinkRelay } from './relay/mocks/relay';
-import { WalletLinkRelay } from './relay/WalletLinkRelay';
-import { ScopedLocalStorage } from './storage/ScopedLocalStorage';
-import { WalletLinkSigner } from './WalletLinkSigner';
-import { WALLETLINK_URL } from ':core/constants';
-import { standardErrorCodes, standardErrors } from ':core/error';
-import { ProviderEventCallback } from ':core/provider/interface';
-import { AddressString } from ':core/type';
+import * as eip712 from '../../vendor-js/eth-eip712-util/index.cjs';
+import { LOCAL_STORAGE_ADDRESSES_KEY } from './relay/constants.js';
+import { MOCK_ADDERESS, MOCK_SIGNED_TX, MOCK_TX, MOCK_TYPED_DATA } from './relay/mocks/fixtures.js';
+import { mockedWalletLinkRelay } from './relay/mocks/relay.js';
+import { WalletLinkRelay } from './relay/WalletLinkRelay.js';
+import { WalletLinkSigner } from './WalletLinkSigner.js';
+import { WALLETLINK_URL } from ':core/constants.js';
+import { standardErrorCodes } from ':core/error/constants.js';
+import { standardErrors } from ':core/error/errors.js';
+import { ProviderEventCallback } from ':core/provider/interface.js';
+import { ScopedLocalStorage } from ':core/storage/ScopedLocalStorage.js';
+import { AddressString } from ':core/type/index.js';
 
-jest.mock('./relay/WalletLinkRelay', () => {
+vi.mock('./relay/WalletLinkRelay', () => {
   return {
     WalletLinkRelay: mockedWalletLinkRelay,
   };
 });
 
 const testStorage = new ScopedLocalStorage('walletlink', WALLETLINK_URL);
-const mockCallback: ProviderEventCallback = jest.fn();
+const mockCallback: ProviderEventCallback = vi.fn();
 
 const createAdapter = (options?: { relay?: WalletLinkRelay }) => {
   const adapter = new WalletLinkSigner({
-    metadata: { appName: 'test', appLogoUrl: null, appChainIds: [1], appDeeplinkUrl: null },
+    metadata: { appName: 'test', appLogoUrl: null, appChainIds: [1] },
     callback: mockCallback,
   });
   if (options?.relay) {
@@ -46,7 +48,7 @@ describe('LegacyProvider', () => {
 
   it('handles close', async () => {
     const relay = mockedWalletLinkRelay();
-    const spy = jest.spyOn(relay, 'resetAndReload');
+    const spy = vi.spyOn(relay, 'resetAndReload');
 
     const provider = createAdapter({ relay });
     await provider.cleanup();
@@ -122,7 +124,7 @@ describe('LegacyProvider', () => {
 
   describe('ecRecover', () => {
     const relay = mockedWalletLinkRelay();
-    const sendRequestSpy = jest.spyOn(relay, 'sendRequest');
+    const sendRequestSpy = vi.spyOn(relay, 'sendRequest');
     const provider = createAdapter({ relay });
 
     beforeEach(() => {
@@ -170,7 +172,7 @@ describe('LegacyProvider', () => {
     const provider = createAdapter({ relay });
 
     test('personal_sign success', async () => {
-      const sendRequestSpy = jest.spyOn(relay, 'sendRequest').mockResolvedValueOnce({
+      const sendRequestSpy = vi.spyOn(relay, 'sendRequest').mockResolvedValueOnce({
         result: 'mocked result',
       });
       const response = await provider?.request({
@@ -195,20 +197,20 @@ describe('LegacyProvider', () => {
           method: 'personal_sign',
           params: ['0x123456789abcdef', 'Super safe message'],
         })
-      ).rejects.toThrowEIPError(
-        standardErrorCodes.rpc.invalidParams,
-        'Invalid Ethereum address: Super safe message'
-      );
+      ).rejects.toMatchObject({
+        code: standardErrorCodes.rpc.invalidParams,
+        message: 'Invalid Ethereum address: Super safe message',
+      });
     });
   });
 
   describe('signTypedData', () => {
     testStorage.setItem(LOCAL_STORAGE_ADDRESSES_KEY, MOCK_ADDERESS);
     const relay = mockedWalletLinkRelay();
-    const sendRequestSpy = jest.spyOn(relay, 'sendRequest');
+    const sendRequestSpy = vi.spyOn(relay, 'sendRequest');
     const provider = createAdapter({ relay });
 
-    const ENCODED_MESSAGE = '0xb7845733ba102a68c6eb21c3cd2feafafd1130de581d7e73be60b76d775b6704';
+    const ENCODED_MESSAGE = '0x421b6e328c574f0ee83a68d51d01be3597d8b5391c7725dfa80247a60b5cd390';
     const ENCODED_TYPED_DATA_JSON = JSON.stringify(MOCK_TYPED_DATA);
 
     beforeEach(() => {
@@ -218,7 +220,7 @@ describe('LegacyProvider', () => {
     });
 
     test.skip('eth_signTypedData_v1', async () => {
-      const hashSpy = jest.spyOn(eip712, 'hashForSignTypedDataLegacy');
+      const hashSpy = vi.spyOn(eip712, 'hashForSignTypedDataLegacy');
       const response = await provider?.request({
         method: 'eth_signTypedData_v1',
         params: [[MOCK_TYPED_DATA], MOCK_ADDERESS],
@@ -237,7 +239,7 @@ describe('LegacyProvider', () => {
     });
 
     test('eth_signTypedData_v3', async () => {
-      const hashSpy = jest.spyOn(eip712, 'hashForSignTypedData_v3');
+      const hashSpy = vi.spyOn(eip712, 'hashForSignTypedData_v3');
       const response = await provider?.request({
         method: 'eth_signTypedData_v3',
         params: [MOCK_ADDERESS, MOCK_TYPED_DATA],
@@ -256,7 +258,7 @@ describe('LegacyProvider', () => {
     });
 
     test('eth_signTypedData_v4', async () => {
-      const hashSpy = jest.spyOn(eip712, 'hashForSignTypedData_v4');
+      const hashSpy = vi.spyOn(eip712, 'hashForSignTypedData_v4');
       const response = await provider?.request({
         method: 'eth_signTypedData_v4',
         params: [MOCK_ADDERESS, MOCK_TYPED_DATA],
@@ -275,7 +277,7 @@ describe('LegacyProvider', () => {
     });
 
     test('eth_signTypedData', async () => {
-      const hashSpy = jest.spyOn(eip712, 'hashForSignTypedData_v4');
+      const hashSpy = vi.spyOn(eip712, 'hashForSignTypedData_v4');
       const response = await provider?.request({
         method: 'eth_signTypedData',
         params: [MOCK_ADDERESS, MOCK_TYPED_DATA],
@@ -414,7 +416,7 @@ describe('LegacyProvider', () => {
           },
         ],
       });
-      expect(response).rejects.toThrow(
+      await expect(response).rejects.toThrow(
         standardErrors.rpc.invalidParams('please pass in at least 1 rpcUrl')
       );
     });
@@ -425,10 +427,10 @@ describe('LegacyProvider', () => {
           method: 'wallet_addEthereumChain',
           params: [{}],
         });
-      }).rejects.toThrowEIPError(
-        standardErrorCodes.rpc.invalidParams,
-        'chainName is a required field'
-      );
+      }).rejects.toMatchObject({
+        code: standardErrorCodes.rpc.invalidParams,
+        message: 'chainName is a required field',
+      });
     });
 
     test('wallet_addEthereumChain native currency', async () => {
@@ -442,10 +444,10 @@ describe('LegacyProvider', () => {
             },
           ],
         });
-      }).rejects.toThrowEIPError(
-        standardErrorCodes.rpc.invalidParams,
-        'nativeCurrency is a required field'
-      );
+      }).rejects.toMatchObject({
+        code: standardErrorCodes.rpc.invalidParams,
+        message: 'nativeCurrency is a required field',
+      });
     });
 
     test('wallet_switchEthereumChain', async () => {
@@ -462,9 +464,9 @@ describe('LegacyProvider', () => {
 
     test('wallet_switchEthereumChain w/ error code', async () => {
       const relay = mockedWalletLinkRelay();
-      jest
-        .spyOn(relay, 'switchEthereumChain')
-        .mockReturnValue(Promise.reject(standardErrors.provider.unsupportedChain()));
+      vi.spyOn(relay, 'switchEthereumChain').mockReturnValue(
+        Promise.reject(standardErrors.provider.unsupportedChain())
+      );
       const localProvider = createAdapter({ relay });
 
       await expect(() => {
@@ -476,10 +478,10 @@ describe('LegacyProvider', () => {
             },
           ],
         });
-      }).rejects.toThrowEIPError(
-        standardErrorCodes.provider.unsupportedChain,
-        expect.stringContaining('Unrecognized chain ID')
-      );
+      }).rejects.toMatchObject({
+        code: standardErrorCodes.provider.unsupportedChain,
+        message: expect.stringContaining('Unrecognized chain ID'),
+      });
     });
 
     test('wallet_watchAsset', async () => {
@@ -503,7 +505,10 @@ describe('LegacyProvider', () => {
           method: 'wallet_watchAsset',
           params: [{}],
         })
-      ).rejects.toThrowEIPError(standardErrorCodes.rpc.invalidParams, 'Type is required');
+      ).rejects.toMatchObject({
+        code: standardErrorCodes.rpc.invalidParams,
+        message: 'Type is required',
+      });
     });
 
     test('wallet_watchAsset w/o valid asset type', async () => {
@@ -516,10 +521,10 @@ describe('LegacyProvider', () => {
             },
           ],
         })
-      ).rejects.toThrowEIPError(
-        standardErrorCodes.rpc.invalidParams,
-        "Asset of type 'ERC721' is not supported"
-      );
+      ).rejects.toMatchObject({
+        code: standardErrorCodes.rpc.invalidParams,
+        message: "Asset of type 'ERC721' is not supported",
+      });
     });
 
     test('wallet_watchAsset to throw option required error', async () => {
@@ -532,7 +537,10 @@ describe('LegacyProvider', () => {
             },
           ],
         })
-      ).rejects.toThrowEIPError(standardErrorCodes.rpc.invalidParams, 'Options are required');
+      ).rejects.toMatchObject({
+        code: standardErrorCodes.rpc.invalidParams,
+        message: 'Options are required',
+      });
     });
 
     test('wallet_watchAsset to throw address required error', async () => {
@@ -546,7 +554,10 @@ describe('LegacyProvider', () => {
             },
           ],
         })
-      ).rejects.toThrowEIPError(standardErrorCodes.rpc.invalidParams, 'Address is required');
+      ).rejects.toMatchObject({
+        code: standardErrorCodes.rpc.invalidParams,
+        message: 'Address is required',
+      });
     });
   });
 });

@@ -1,49 +1,60 @@
-import { Signer } from './interface';
-import { SCWSigner } from './scw/SCWSigner';
-import { WalletLinkSigner } from './walletlink/WalletLinkSigner';
-import { Communicator } from ':core/communicator/Communicator';
-import { ConfigMessage, MessageID, SignerType } from ':core/message';
-import { AppMetadata, Preference, ProviderEventCallback } from ':core/provider/interface';
-import { ScopedAsyncStorage } from ':core/storage/ScopedAsyncStorage';
+import { Signer } from './interface.js';
+import { SCWSigner } from './scw/SCWSigner.js';
+import { WalletLinkSigner } from './walletlink/WalletLinkSigner.js';
+import { Communicator } from ':core/communicator/Communicator.js';
+import { ConfigMessage, SignerType } from ':core/message/ConfigMessage.js';
+import { MessageID } from ':core/message/Message.js';
+import {
+  AppMetadata,
+  Preference,
+  ProviderEventCallback,
+  RequestArguments,
+} from ':core/provider/interface.js';
+import { ScopedLocalStorage } from ':core/storage/ScopedLocalStorage.js';
 
 const SIGNER_TYPE_KEY = 'SignerType';
-const storage = new ScopedAsyncStorage('CBWSDK', 'SignerConfigurator');
+const storage = new ScopedLocalStorage('CBWSDK', 'SignerConfigurator');
 
-export async function loadSignerType(): Promise<SignerType | null> {
-  return (await storage.getItem(SIGNER_TYPE_KEY)) as SignerType;
+export function loadSignerType(): SignerType | null {
+  return storage.getItem(SIGNER_TYPE_KEY) as SignerType;
 }
 
-export async function storeSignerType(signerType: SignerType): Promise<void> {
-  return storage.setItem(SIGNER_TYPE_KEY, signerType);
+export function storeSignerType(signerType: SignerType) {
+  storage.setItem(SIGNER_TYPE_KEY, signerType);
 }
 
 export async function fetchSignerType(params: {
   communicator: Communicator;
   preference: Preference;
   metadata: AppMetadata; // for WalletLink
+  handshakeRequest: RequestArguments;
+  callback: ProviderEventCallback;
 }): Promise<SignerType> {
-  const { communicator, metadata } = params;
-  listenForWalletLinkSessionRequest(communicator, metadata).catch(() => {});
+  const { communicator, metadata, handshakeRequest, callback } = params;
+  listenForWalletLinkSessionRequest(communicator, metadata, callback).catch(() => {});
 
   const request: ConfigMessage & { id: MessageID } = {
     id: crypto.randomUUID(),
     event: 'selectSignerType',
-    data: params.preference,
+    data: {
+      ...params.preference,
+      handshakeRequest,
+    },
   };
   const { data } = await communicator.postRequestAndWaitForResponse(request);
   return data as SignerType;
 }
 
-export async function createSigner(params: {
+export function createSigner(params: {
   signerType: SignerType;
   metadata: AppMetadata;
   communicator: Communicator;
   callback: ProviderEventCallback;
-}): Promise<Signer> {
+}): Signer {
   const { signerType, metadata, communicator, callback } = params;
   switch (signerType) {
     case 'scw': {
-      return SCWSigner.createInstance({
+      return new SCWSigner({
         metadata,
         callback,
         communicator,
@@ -60,7 +71,8 @@ export async function createSigner(params: {
 
 async function listenForWalletLinkSessionRequest(
   communicator: Communicator,
-  metadata: AppMetadata
+  metadata: AppMetadata,
+  callback: ProviderEventCallback
 ) {
   await communicator.onMessage<ConfigMessage>(({ event }) => event === 'WalletLinkSessionRequest');
 
@@ -68,6 +80,7 @@ async function listenForWalletLinkSessionRequest(
   // will revisit this when refactoring the walletlink signer
   const walletlink = new WalletLinkSigner({
     metadata,
+    callback,
   });
 
   // send wallet link session to popup

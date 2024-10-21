@@ -1,16 +1,24 @@
 // Copyright (c) 2018-2024 Coinbase, Inc. <https://www.coinbase.com/>
 
-import { LogoType, walletLogo } from './assets/wallet-logo';
-import { CoinbaseWalletProvider } from './CoinbaseWalletProvider';
-import { AppMetadata, Preference, ProviderInterface } from './core/provider/interface';
-import { LIB_VERSION } from './version';
-import { ScopedAsyncStorage } from ':core/storage/ScopedAsyncStorage';
-import { getFavicon } from ':core/type/util';
-import { getCoinbaseInjectedProvider } from ':util/provider';
+import { LogoType, walletLogo } from './assets/wallet-logo.js';
+import { CoinbaseWalletProvider } from './CoinbaseWalletProvider.js';
+import { AppMetadata, Preference, ProviderInterface } from './core/provider/interface.js';
+import { VERSION } from './sdk-info.js';
+import { ScopedLocalStorage } from ':core/storage/ScopedLocalStorage.js';
+import { getFavicon } from ':core/type/util.js';
+import { checkCrossOriginOpenerPolicy } from ':util/checkCrossOriginOpenerPolicy.js';
+import { getCoinbaseInjectedProvider } from ':util/provider.js';
+import { validatePreferences } from ':util/validatePreferences.js';
 
 // for backwards compatibility
 type CoinbaseWalletSDKOptions = Partial<AppMetadata>;
 
+/**
+ * CoinbaseWalletSDK
+ *
+ * @deprecated CoinbaseWalletSDK is deprecated and will likely be removed in a future major version release.
+ * It's recommended to use `createCoinbaseWalletSDK` instead.
+ */
 export class CoinbaseWalletSDK {
   private metadata: AppMetadata;
 
@@ -19,12 +27,13 @@ export class CoinbaseWalletSDK {
       appName: metadata.appName || 'Dapp',
       appLogoUrl: metadata.appLogoUrl || getFavicon(),
       appChainIds: metadata.appChainIds || [],
-      appDeeplinkUrl: null,
     };
     this.storeLatestVersion();
+    void checkCrossOriginOpenerPolicy();
   }
 
   public makeWeb3Provider(preference: Preference = { options: 'all' }): ProviderInterface {
+    validatePreferences(preference);
     const params = { metadata: this.metadata, preference };
     return getCoinbaseInjectedProvider(params) ?? new CoinbaseWalletProvider(params);
   }
@@ -39,8 +48,8 @@ export class CoinbaseWalletSDK {
     return walletLogo(type, width);
   }
 
-  private async storeLatestVersion() {
-    const versionStorage = new ScopedAsyncStorage('CBWSDK');
-    versionStorage.setItem('VERSION', LIB_VERSION);
+  private storeLatestVersion() {
+    const versionStorage = new ScopedLocalStorage('CBWSDK');
+    versionStorage.setItem('VERSION', VERSION);
   }
 }

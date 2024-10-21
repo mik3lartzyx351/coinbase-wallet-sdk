@@ -1,9 +1,16 @@
-import { LIB_VERSION } from '../../version';
-import { ConfigMessage, Message, MessageID } from '../message';
-import { CB_KEYS_URL } from ':core/constants';
-import { standardErrors } from ':core/error';
-import { AppMetadata } from ':core/provider/interface';
-import { closePopup, openPopup } from ':util/web';
+import { VERSION } from '../../sdk-info.js';
+import { ConfigMessage } from '../message/ConfigMessage.js';
+import { Message, MessageID } from '../message/Message.js';
+import { CB_KEYS_URL } from ':core/constants.js';
+import { standardErrors } from ':core/error/errors.js';
+import { AppMetadata, Preference } from ':core/provider/interface.js';
+import { closePopup, openPopup } from ':util/web.js';
+
+export type CommunicatorOptions = {
+  url?: string;
+  metadata: AppMetadata;
+  preference: Preference;
+};
 
 /**
  * Communicates with a popup window for Coinbase keys.coinbase.com (or another url)
@@ -15,24 +22,16 @@ import { closePopup, openPopup } from ':util/web';
  * It also handles cleanup of event listeners and the popup window itself when necessary.
  */
 export class Communicator {
-  static communicators = new Map<string, Communicator>();
-
   private readonly metadata: AppMetadata;
+  private readonly preference: Preference;
   private readonly url: URL;
   private popup: Window | null = null;
   private listeners = new Map<(_: MessageEvent) => void, { reject: (_: Error) => void }>();
 
-  private constructor(url: string = CB_KEYS_URL, metadata: AppMetadata) {
+  constructor({ url = CB_KEYS_URL, metadata, preference }: CommunicatorOptions) {
     this.url = new URL(url);
     this.metadata = metadata;
-  }
-
-  static getInstance(url: string = CB_KEYS_URL, metadata: AppMetadata): Communicator {
-    if (!this.communicators.has(url)) {
-      this.communicators.set(url, new Communicator(url, metadata));
-    }
-
-    return this.communicators.get(url)!;
+    this.preference = preference;
   }
 
   /**
@@ -110,7 +109,11 @@ export class Communicator {
       .then((message) => {
         this.postMessage({
           requestId: message.id,
-          data: { version: LIB_VERSION, metadata: this.metadata },
+          data: {
+            version: VERSION,
+            metadata: this.metadata,
+            preference: this.preference,
+          },
         });
       })
       .then(() => {

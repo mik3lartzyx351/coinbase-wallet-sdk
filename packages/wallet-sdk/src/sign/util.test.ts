@@ -1,41 +1,37 @@
-import { fetchSignerType, loadSignerType, storeSignerType } from './util';
-import { Communicator } from ':core/communicator/Communicator';
-import { CB_KEYS_URL } from ':core/constants';
-import { Preference } from ':core/provider/interface';
-import { ScopedAsyncStorage } from ':core/storage/ScopedAsyncStorage';
+import { Mock, vi } from 'vitest';
 
-jest.mock(':core/storage/ScopedAsyncStorage');
+import { fetchSignerType, loadSignerType, storeSignerType } from './util.js';
+import { Communicator } from ':core/communicator/Communicator.js';
+import { CB_KEYS_URL } from ':core/constants.js';
+import { Preference } from ':core/provider/interface.js';
+import { ScopedLocalStorage } from ':core/storage/ScopedLocalStorage.js';
+
+vi.mock(':core/storage/ScopedLocalStorage');
 
 describe('util', () => {
-  const mockStorage = {
-    getItem: jest.fn(),
-    setItem: jest.fn(),
-  };
-
   beforeEach(() => {
-    jest.clearAllMocks();
-    (ScopedAsyncStorage as jest.Mock).mockImplementation(() => mockStorage);
+    vi.clearAllMocks();
   });
 
   describe('loadSignerType', () => {
-    it('should load signer type from storage', async () => {
-      (ScopedAsyncStorage.prototype.getItem as jest.Mock).mockResolvedValue('scw');
-      const result = await loadSignerType();
+    it('should load signer type from storage', () => {
+      (ScopedLocalStorage.prototype.getItem as Mock).mockReturnValue('scw');
+      const result = loadSignerType();
       expect(result).toBe('scw');
-      expect(ScopedAsyncStorage.prototype.getItem).toHaveBeenCalledWith('SignerType');
+      expect(ScopedLocalStorage.prototype.getItem).toHaveBeenCalledWith('SignerType');
     });
 
-    it('should return null if no signer type is stored', async () => {
-      (ScopedAsyncStorage.prototype.getItem as jest.Mock).mockResolvedValue(null);
-      const result = await loadSignerType();
+    it('should return null if no signer type is stored', () => {
+      (ScopedLocalStorage.prototype.getItem as Mock).mockReturnValue(null);
+      const result = loadSignerType();
       expect(result).toBeNull();
     });
   });
 
   describe('storeSignerType', () => {
-    it('should store signer type in storage', async () => {
-      await storeSignerType('scw');
-      expect(ScopedAsyncStorage.prototype.setItem).toHaveBeenCalledWith('SignerType', 'scw');
+    it('should store signer type in storage', () => {
+      storeSignerType('scw');
+      expect(ScopedLocalStorage.prototype.setItem).toHaveBeenCalledWith('SignerType', 'scw');
     });
   });
 
@@ -44,20 +40,25 @@ describe('util', () => {
       appName: 'Test App',
       appLogoUrl: null,
       appChainIds: [1],
-      appDeeplinkUrl: null,
     };
     const preference: Preference = { options: 'all' };
 
     it('should complete signerType selection correctly', async () => {
-      const communicator = Communicator.getInstance(CB_KEYS_URL, metadata);
-      communicator.postMessage = jest.fn();
-      communicator.onMessage = jest.fn().mockResolvedValue({
+      const communicator = new Communicator({
+        url: CB_KEYS_URL,
+        metadata,
+        preference: { keysUrl: CB_KEYS_URL, options: 'all' },
+      });
+      communicator.postMessage = vi.fn();
+      communicator.onMessage = vi.fn().mockResolvedValue({
         data: 'scw',
       });
       const signerType = await fetchSignerType({
         communicator,
         preference,
         metadata,
+        handshakeRequest: { method: 'eth_requestAccounts' },
+        callback: vi.fn(),
       });
       expect(signerType).toEqual('scw');
     });
