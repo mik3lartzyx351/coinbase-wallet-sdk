@@ -34,7 +34,7 @@
     "clsx": "^1.2.1",
     "eventemitter3": "^5.0.1",
     "preact": "^10.24.2",
-    "vitest": "^2.1.2"
+    "vitest": "^3.0.5"
   },
   "devDependencies": {
     "@size-limit/preset-big-lib": "^11.1.6",
